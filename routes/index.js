@@ -1,49 +1,18 @@
 var express = require('express');
 var router = express.Router();
-var mongoClient = require('mongodb').MongoClient;
-var db;
-var db_url = "mongodb://localhost:27017/e-club-db";
-var path = require("path");
-var ObjectID = require('mongodb').ObjectID;
-var passport = require('passport');
 
-var Strategy = require('passport-local').Strategy;
-
-var auth = require('../auth');
-
+////EXPRESS////
 router.use(require('cookie-parser')());
 router.use(require('body-parser').urlencoded({ extended: true }));
 router.use(require('express-session')({ secret: 'supersecretsave', resave: false, saveUninitialized: false }));
 
-passport.use(new Strategy(
-  function(username, password, cb) {
-    auth.users.findByUsername(username, function(err, user) {
-      if (err) { return cb(err); }
-      if (!user) { return cb(null, false); }
-      if (user.password != password) { return cb(null, false); }
-      return cb(null, user);
-    });
-  }));
-  
-passport.serializeUser(function(user, cb) {
-  cb(null, user.id);
-}); 
-passport.deserializeUser(function(id, cb) {
-  auth.users.findById(id, function (err, user) {
-    if (err) { return cb(err); }
-    cb(null, user);
-  });
-});
+////CONNECT TO DB AND CREATE DB OBJECT////
+//Also checks if the collections have been created
+var mongoClient = require('mongodb').MongoClient;
+var ObjectID = require('mongodb').ObjectID;
+var db;
+var db_url = "mongodb://localhost:27017/e-club-db";
 
-router.use(passport.initialize());
-router.use(passport.session());
-
-router.post('/login', 
-  passport.authenticate('local', { failureRedirect: '/' }),
-  function(req, res) {
-    res.redirect('/');
-  });
-  
 mongoClient.connect(db_url,
 	{
 	  poolSize: 20,
@@ -57,277 +26,60 @@ mongoClient.connect(db_url,
 	db = database;
 	createInventory();
 });
-/* GET home page. */
-router.get('/', function(req, res, next) {
-	/*db.collection('inventory').find().toArray(function(err,docs){
-			db.close();*/
-			res.render('index', { title: 'Electronics Club @ OSU', user:req.user});
-		/*});; 	
-	});*/
-	//res.sendFile(path.join(__dirname+'/old-site/index.html'));
-});
-router.post('/search', function(req, res, next){
-	console.log("We got a search request!");
-	var query = createSearchQuery(req);
-	//console.log(query);
-	db.collection('inventory').find(query).limit(100).toArray(function(err,results){
-			if(err) throw err;
-			db.close;
-			//console.log(results);
-			res.send(results);
-			
-	}); 
-});
-router.post('/add', function(req, res, next){
-	console.log("We got an add request!");
-	req.body['amountCheckedOut']=0;
-	db.collection('inventory').insert(req.body).then(function(result){
-		db.close;
-		res.end();
-	}).catch(function(err){
-		console.log(err);
-	});
-});
-router.post('/delete', function(req, res, next){
-	console.log("We got an delete request!");
-	var _id = new ObjectID(req.body._id);
-	db.collection('inventory').remove({_id:_id}).then(function(){
-		db.close;
-		res.end();
-	}).catch(function(err){
-		console.log(err);
-	});
-});
-router.post('/modify',function(req,res,next){
-	var _id = new ObjectID(req.body._id);
-	delete req.body._id;
-	db.collection('inventory').update({_id:_id},{$set:req.body}).then(function(result){
-			db.close;
-			res.end();
-	}).catch(function(error) {
-		console.log(error);
-	});;
-});
-router.post('/get-check-outs',function(req,res,next){
-	console.log('We got a check-out request');
-	db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
-		if(err) throw err;
-			db.close;
-			//console.log(results);
-			res.send(results);
-	});
+
+////USER IDENTIFICATION////
+//Used by login routes
+var passport = require('passport');
+var Strategy = require('passport-local').Strategy;
+var auth = require('../auth');
+passport.use(new Strategy(
+	function(username, password, cb) {
+	  auth.users.findByUsername(username, function(err, user) {
+		console.log(user); 
+		if (err) { return cb(err); }
+		if (!user) { return cb(null, false); }
+		if (user.password != password) { 
+		   
+		  return cb(null, false); }
+		return cb(null, user);
+	  },db);
+	}));
+	
+passport.serializeUser(function(user, cb) {
+console.log(user);
+cb(null, user.id);
+}); 
+
+passport.deserializeUser(function(id, cb) {
+auth.users.findById(id, function (err, user) {
+	if (err) { return cb(err); }
+	cb(null, user);
+},db);
 });
 
-router.post('/add-check-out',function(req,res,next){
-	var _id;
-	var data;
-	req.body['checkedIn'] = false;
-	var store = req.body;
-	var strip_result =  Object.assign({},req.body);
-	delete strip_result['fname'];
-	delete strip_result['dateDue'];
-	delete strip_result['_id'];
-	delete strip_result['dNum'];
-	delete strip_result['fNum'];
-	delete strip_result['checkedIn'];
-	delete strip_result['lname'];
-	//console.log(strip_result);
-	var keys= Object.keys(strip_result);
-	var index = 0;
-	var size = keys.length-1;
-	incParts(res,store,keys,index,size);
-});
-function incParts(res,store,keys,index,size)
-{
-	data = JSON.parse(store[keys[index]]);
-	console.log(store);
-	_id = new ObjectID(keys[index]);
-	db.collection('inventory').update({_id:_id},{$inc:{amountCheckedOut:parseInt(data['amountToCheckOut'],10)}}).then(function(result){
-		if(size==index)
-		{
-			db.collection('checkOut').insert(store).then(function(){
-					db.close;
-					res.end();
-				}).catch(function(error) {
-					console.log(error);
-				});
-		}
-		else
-		{
-				index = index + 1;
-				incParts(res,store,keys,index,size);
-		}
-	}).catch(function(error) {
-			console.log(error);
-		});
-}
-router.post('/check-in-all',function(req,res,next){
-	var checkOut_id = new ObjectID(req.body._id); //ID of the whole checkout
-	var part_id; //ID of a single part
-	db.collection('checkOut').find({_id:checkOut_id}).toArray().then(function(result){
-		if(result.length==0)
-		{
-			console.log('Bad ID for check in');
-			res.end();
-			db.close();
-		}
-		else
-		{
-			store = Object.assign({},result[0]);
-			strip_result = Object.assign({},result[0]);
-			
-			delete strip_result['fname'];
-			delete strip_result['dateDue'];
-			delete strip_result['_id'];
-			delete strip_result['dNum'];
-			delete strip_result['fNum'];
-			delete strip_result['checkedIn'];
-			delete strip_result['lname'];
-			var keys = Object.keys(strip_result);
-			var size = keys.length-1;
-			console.log(result[0]);
-			var index = 0;
-			decParts(res,store,keys,index,size,checkOut_id);
-		}
-	}).catch(function(error) {
-		console.log(error);
-	});
-});
-function decParts(res,store,keys,index,size,checkOut_id){
-	part_id = new ObjectID(keys[index]);
-	data = JSON.parse(store[keys[index]]);
-	db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:-1*parseInt(data['amountToCheckOut'],10)}}).then(function(result){	
-		if(size==index)
-		{
-			db.collection('checkOut').remove({_id:checkOut_id}).then(function(results){
-				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
-				if(err) throw err;
-					db.close;
-					//console.log(results);
-					res.send(results);
-				});
-			}).catch(function(err){
-				console.log(err);
-			});
-		}
-		else
-		{
-			index = index + 1;
-			decParts(res,store,keys,index,size,checkOut_id);
-		}
-	})
-	.catch(function(err){
-		console.log(err);
-	});
-};
-router.post('/add-part-post-check-out',function(req,res,next){
-	var checkOut_id = new ObjectID(req.body.checkOut_id);
-	parts = Object.assign({},req.body);
-	delete parts['checkOut_id'];
-	var keys = Object.keys(parts);
-	var size = keys.length-1;
-	var index = 0;
-	db.collection('checkOut').find({_id:checkOut_id}).toArray(function(err,currentCheckOut){
-		addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut[0]);	
-	});
-	
-});
-function addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut)
-{
-	var part_id;
-	var data;
-	part_id = new ObjectID(keys[index]);
-	data = JSON.parse(parts[keys[index]]);
-	//increment the amount in the inventory database that is checked out
-	db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:parseInt(data['amountToCheckOut'],10)}}).then(function(result){
-		var query = {};
-		var toReAdd = parts[keys[index]];
-		console.log(currentCheckOut[0]);
-		console.log(keys[index]);
-		if(keys[index] in currentCheckOut)//If the part has been previously check out increment the value instead of writing over it
-		{
-			currentCheckOutPart = JSON.parse(currentCheckOut[keys[index]]); //The current part as it is saved in the 
-			console.log(currentCheckOutPart);
-			currentCheckOutPart['amountToCheckOut'] = parseInt(data['amountToCheckOut']) + parseInt(currentCheckOutPart['amountToCheckOut']);
-			toReAdd = JSON.stringify(currentCheckOutPart);
-			console.log(toReAdd);
-		}
-		query[keys[index]] = toReAdd;
-		
-		db.collection('checkOut').update({_id:checkOut_id},{$set:query}).then(function(result){
-			if(index == size)
-			{
-				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
-				if(err) throw err;
-					db.close;
-					//console.log(results);
-					res.send(results);
-				});
-			}
-			else
-			{
-				index = index + 1;
-				addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut);
-			}
-		})
-		.catch(function(err){
-			console.log(err);
-		});
-	}).catch(function(err){
-		console.log(err);
-	});
-};
+router.use(passport.initialize());
+router.use(passport.session());
+
+////LOGIN/LOGOUT ROUTES////
+router.post('/login', 
+  passport.authenticate('local', { failureRedirect: '/' }),
+  function(req, res) {
+    res.redirect('/');
+  });
 router.get('/logout',function(req,res,next){
 	req.logout();
     res.redirect('/');
 });
-router.post('/check-in-part',function(req,res,next){
-	var part_id = new ObjectID(req.body.part_id);
-	var part_id_str = req.body.part_id;
-	var checkOut_id = new ObjectID(req.body.checkOut_id);
-	db.collection('checkOut').find({_id:checkOut_id}).toArray(function(err,result){
-		if(err)
-		{
-			console.log(err);
-			res.end();
-		}
-		if(result.length==0)
-		{
-			console.log('Bad ID for check in');
-			res.end();
-		}
-		result = result[0];
-		data = JSON.parse(result[part_id_str]);
-		db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:-1*parseInt(data['amountToCheckOut'],10)}}).then(function(results){
-			console.log(result);
-			var unset = {}; //USEFUL TRICK TURN string value into key
-			unset[part_id_str]="";
-			db.collection('checkOut').update({_id:checkOut_id},{$unset:unset}).then(function(results){
-				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
-				if(err) throw err;
-					db.close;
-					//console.log(results);
-					res.send(results);
-				});
-			}).catch(function(err){
-				console.log('Error removing part of checkout');
-				console.log(err);
-			});
-		}).catch(function(err){
-			console.log('Error modifying the amount check out when checking in a part')
-			console.log(err);
-		});
-	});
+
+////GET HOME PAGE////
+router.get('/', function(req, res, next) {
+	res.render('index', { title: 'Electronics Club @ OSU', user:req.user});
 });
-router.post('/check-check-out',function(req,res,next){
-	var query = createSearchCheckOut(req);
-	db.collection('checkOut').find(query).toArray(function(err,results){
-	if(err) throw err;
-		db.close;
-		//console.log(results);
-		res.send(results[0]);
-	});
-});
+
+//////SIMPLE PART DB ENDPOINTS//////
+
+////POST SEARCH////
+//Take form data and build reg expressions then send it to the database
 function createSearchQuery(req)
 {
 	if(req.body.cat==undefined||req.body.cat==null)
@@ -347,18 +99,349 @@ function createSearchQuery(req)
 			partNum:partNum,
 			loc:loc,
 			val:val
-			}
+			};
 }
+//Find using regex
+//req.body.partName : Part Name
+//req.body.cat      : Catgory
+//req.body.subCat   : subCat
+//req.body.partNum  : Part number
+//req.body.loc      : Location in the lab
+//req.body.val      : Value eg 30K for a 30K resistor
+router.post('/search', function(req, res, next){
+	console.log("We got a search request!");
+	var query = createSearchQuery(req);
+	db.collection('inventory').find(query).limit(100).toArray(function(err,results){
+		if(err) throw err;
+		res.send(results);
+	}); 
+});
+
+////POST ADD////
+//req.body.partName : Name of the part
+//req.body.cat      : Category
+//req.body.subCat   : Subcategory
+//req.body.val      : Value
+//req.body.partNum  : Part number
+//req.body.loc      : Location
+//req.body.qty      : Quantity
+//req.body.notes    : Notes
+//Inserted into the database with req.body removed
+//unique _id is generated by mongodb
+//amountCheckedOut added to default 0
+//All names come from form names which are extracted using getFormData function from name attribute in HTML
+router.post('/add', function(req, res, next){
+	console.log("We got an add request!");
+	//Set amountCheckOut to default zero, only entry that is not in user form
+	req.body.amountCheckedOut=0;
+	//Simple insert
+	db.collection('inventory').insert(req.body).then(function(result){
+		res.end();
+	}).catch(function(err){
+		console.log(err);
+	});
+});
+
+////POST DELETE////
+//req.body._id : Unique part id to delete
+router.post('/delete', function(req, res, next){
+	console.log("We got an delete request!");
+	var _id = new ObjectID(req.body._id);
+	db.collection('inventory').remove({_id:_id}).then(function(){
+		res.end();
+	}).catch(function(err){
+		console.log(err);
+	});
+});
+
+////POST MODIFY////
+//req.body._id : Unique id for the part
+//req.body     : New part informtion same format as add
+router.post('/modify',function(req,res,next){
+	var _id = new ObjectID(req.body._id);
+	delete req.body._id;
+	db.collection('inventory').update({_id:_id},{$set:req.body}).then(function(result){
+			res.end();
+	}).catch(function(error) {
+		console.log(error);
+	});
+});
+
+//////CHECKOUT ENDPOINTS//////
+
+////POST GET-CHECK-OUTS////
+//Simple gets everything in the checkouts collection
+router.post('/get-check-outs',function(req,res,next){
+	console.log('We got a check-out request');
+	db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
+		if(err) throw err;
+			res.send(results);
+	});
+});
+
+////POST ADD-CHECK-OUT////
+//Modify the part data to account for the change in the amount checked out
+//res:Response that will eventually be sent back to the user
+//store:Value that will be stored in checkout collection
+//keys:Stripped down store, that contains only the part _ids to be modified
+//index: The current index in the recursive function
+//size: The total number of parts that are to be added.
+function incParts(res,store,keys,index,size)
+{
+	data = JSON.parse(store[keys[index]]);
+	_id = new ObjectID(keys[index]);
+	//Update the current part's amount checked out
+	db.collection('inventory').update({_id:_id},{$inc:{amountCheckedOut:parseInt(data.amountToCheckOut,10)}}).then(function(result){
+		//Once we have looped through actually add the checkOut data to the checkout collection
+		if(size==index)
+		{
+			db.collection('checkOut').insert(store).then(function(){
+					res.end();
+				}).catch(function(error) {
+					console.log(error);
+				});
+		}
+		//More parts need to have the amount checked out incremented
+		else
+		{
+				index = index + 1;
+				incParts(res,store,keys,index,size);
+		}
+	}).catch(function(error) {
+			console.log(error);
+		});
+}
+router.post('/add-check-out',function(req,res,next){
+	req.body.checkedIn = false;
+	var store = req.body;
+	//Get rid of unnecessary data need to do this because we will loop through the data to modify the amount checked out in each part
+	var strip_result =  Object.assign({},req.body);
+	delete strip_result.fname;
+	delete strip_result.dateDue;
+	delete strip_result._id;
+	delete strip_result.dNum;
+	delete strip_result.fNum;
+	delete strip_result.checkedIn;
+	delete strip_result.lname;
+	//First check that the form number doesn't already exist
+	db.collection('checkOut').find({fNum:req.body.fNum,checkedIn:false}).toArray(function(err,results){ //check if the fNum already exists
+		if(err) throw err;
+		console.log(results);
+		console.log(results.length);
+		if(results.length>0)
+		{
+			res.status(409);
+			res.send('This form number is already being used!');
+		}
+		else
+		{
+			var keys= Object.keys(strip_result);
+			var index = 0;
+			var size = keys.length-1;
+			//Recursive function
+			incParts(res,store,keys,index,size);
+		}
+	});
+});
+
+////POST CHECK-IN-ALL////
+//Opposite of the incParts function that modifies the number checkout for each part after it is turned in
+//res:Response that will eventually be sent back to the user
+//store:Value that will be stored in checkout collection
+//keys:Stripped down store, that contains only the part _ids to be modified
+//index: The current index in the recursive function
+//size: The total number of parts that are to be added.
+function decParts(res,store,keys,index,size,checkOut_id){
+	part_id = new ObjectID(keys[index]);
+	data = JSON.parse(store[keys[index]]);
+	db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:-1*parseInt(data.amountToCheckOut,10)}}).then(function(result){	
+		if(size==index)
+		{
+			db.collection('checkOut').remove({_id:checkOut_id}).then(function(results){
+				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
+				if(err) throw err;
+					res.send(results);
+				});
+			}).catch(function(err){
+				console.log(err);
+			});
+		}
+		else
+		{
+			index = index + 1;
+			decParts(res,store,keys,index,size,checkOut_id);
+		}
+	})
+	.catch(function(err){
+		console.log(err);
+	});
+}
+router.post('/check-in-all',function(req,res,next){
+	var checkOut_id = new ObjectID(req.body._id); //ID of the whole checkout
+	var part_id; //ID of a single part
+	//Make sure the checkout exists
+	db.collection('checkOut').find({_id:checkOut_id}).toArray().then(function(result){
+		if(result.length==0)
+		{
+			console.log('Bad ID for check in');
+			res.end();
+		}
+		else
+		{
+			store = Object.assign({},result[0]);
+			strip_result = Object.assign({},result[0]);
+			delete strip_result.fname;
+			delete strip_result.dateDue;
+			delete strip_result._id;
+			delete strip_result.dNum;
+			delete strip_result.fNum;
+			delete strip_result.checkedIn;
+			delete strip_result.lname;
+			var keys = Object.keys(strip_result);
+			var size = keys.length-1;
+			console.log(result[0]);
+			var index = 0;
+			decParts(res,store,keys,index,size,checkOut_id);
+		}
+	}).catch(function(error) {
+		console.log(error);
+	});
+});
+
+////POST ADD-PART-POST-CHECK-OUT
+////Add parts to an already existing checkout
+//Spaghetti because currently part data is stored within the part collection and in the checkout collection, so have to modify both, and it is stored in stringified JSON LOL
+//Recursive function
+//res: The response to be sent back to the client
+//parts: The original data
+//index: Index of current part to be modified
+//CheckOut_id: ID of the current checkout
+//current_check_out: The current checkout
+function addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut)
+{
+	var part_id;
+	var data;
+	part_id = new ObjectID(keys[index]);
+	data = JSON.parse(parts[keys[index]]);
+	//increment the amount in the inventory database that is checked out
+	db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:parseInt(data.amountToCheckOut,10)}}).then(function(result){
+		var query = {};
+		var toReAdd;
+		console.log(currentCheckOut[0]);
+		console.log(keys[index]);
+		if(keys[index] in currentCheckOut)//If the part has been previously checked out increment the value instead of writing over it
+		{
+			currentCheckOutPart = JSON.parse(currentCheckOut[keys[index]]); //The current part as it is saved in the checkout
+			currentCheckOutPart.amountToCheckOut = parseInt(data.amountToCheckOut) + parseInt(currentCheckOutPart.amountToCheckOut); //Increment
+			toReAdd = JSON.stringify(currentCheckOutPart);
+			console.log(toReAdd);
+			console.log(currentCheckOutPart);
+		}
+		else //Just add it in if it doesn't exist
+		{
+			toReAdd = parts[keys[index]];
+		}
+		query[keys[index]] = toReAdd;
+		//Update in the checkout database
+		db.collection('checkOut').update({_id:checkOut_id},{$set:query}).then(function(result){
+			if(index == size)
+			{
+				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
+				if(err) throw err;
+					res.send(results);
+				});
+			}
+			else
+			{
+				index = index + 1;
+				addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut);
+			}
+		})
+		.catch(function(err){
+			console.log(err);
+		});
+	}).catch(function(err){
+		console.log(err);
+	});
+}
+//Expects req to contain a list of parts in a checkout
+router.post('/add-part-post-check-out',function(req,res,next){
+	var checkOut_id = new ObjectID(req.body.checkOut_id);
+	parts = Object.assign({},req.body);
+	delete parts.checkOut_id;
+	var keys = Object.keys(parts);
+	var size = keys.length-1;
+	var index = 0;
+	db.collection('checkOut').find({_id:checkOut_id}).toArray(function(err,currentCheckOut){
+		addPartsExistingCheckOut(res,parts,keys,index,size,checkOut_id,currentCheckOut[0]);	
+	});
+	
+});
+
+////POST CHECK-IN-PART////
+//Check in a single part
+router.post('/check-in-part',function(req,res,next){
+	var part_id = new ObjectID(req.body.part_id);
+	var part_id_str = req.body.part_id;
+	var checkOut_id = new ObjectID(req.body.checkOut_id);
+	db.collection('checkOut').find({_id:checkOut_id}).toArray(function(err,result){
+		if(err)
+		{
+			console.log(err);
+			res.end();
+		}
+		if(result.length==0)
+		{
+			console.log('Bad ID for check in');
+			res.end();
+		}
+		result = result[0];
+		data = JSON.parse(result[part_id_str]);
+		db.collection('inventory').update({_id:part_id},{$inc:{amountCheckedOut:-1*parseInt(data.amountToCheckOut,10)}}).then(function(results){
+			console.log(result);
+			var unset = {}; //USEFUL TRICK turn string value into key
+			unset[part_id_str]="";
+			db.collection('checkOut').update({_id:checkOut_id},{$unset:unset}).then(function(results){
+				db.collection('checkOut').find({checkedIn:false}).toArray(function(err,results){
+				if(err) throw err;
+					res.send(results);
+				});
+			}).catch(function(err){
+				console.log('Error removing part of checkout');
+				console.log(err);
+			});
+		}).catch(function(err){
+			console.log('Error modifying the amount check out when checking in a part');
+			console.log(err);
+		});
+	});
+});
+
+////POST CHECK-CHECK-OUT////
+//Lets a user find their specific checkout using there lastname + dot number
 function createSearchCheckOut(req)
 {
-	var lname = req.body['lname'];
-	var dNum = req.body['dNum'];
-	var lname = new RegExp(lname,'i');
+	var lname = req.body.lname;
+	var dNum = req.body.dNum;
+	var searchedLname = new RegExp(lname,'i');
 	return {dNum : dNum,
-			lname:lname,
+			lname:searchedLname,
 			checkedIn:false
-			}
+			};
 }
+//Expects 
+//req.body.lname : Last name of user
+//req.body.dNum  : Dot number of user
+router.post('/check-check-out',function(req,res,next){
+	var query = createSearchCheckOut(req);
+	db.collection('checkOut').find(query).toArray(function(err,results){
+	if(err) throw err;
+		res.send(results[0]);
+	});
+});
+
+
+//Create the necessary tables if they don't exist 
 function createAdmin()
 {
 	db.createCollection("admin",{strict:true},function(err,res){
@@ -412,7 +495,6 @@ function createCheckOutParts()
 		{
 			console.log("checkOutParts collection created!");
 		}
-		db.close;
 	});
 }
 

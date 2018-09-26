@@ -30,7 +30,7 @@ block content
 			a(class="nav-link" href="#" id="check-out-tab") Check-outs
 	#search-container.container
 		if user
-			div(class="modal fade" id="invModal" value="")
+			div(class="modal fade" id="modify-delete-modal" value="")
 				div(id="storePart" value="" style="display:none")
 				div(class="modal-dialog")
 					div(class="modal-content")
@@ -41,7 +41,7 @@ block content
 							div(class="modal-body")
 								button(type="button" id="modify-button" class="btn btn-primary") Modify
 								button(type="button" id="delete-button" class="btn btn-danger") Delete
-						form(id="modify-form" style="display:none")
+						form(id="modify-form" class='m-3' style="display:none")
 							#input-row.form-row
 								div(class="form-group col")
 									label(for="category") Category
@@ -71,7 +71,7 @@ block content
 									textarea(class="form-control" id="mod-notes" rows="5" name="notes")
 							div(class="form-row")
 								label(for="inputQuantity")
-								button(id="modifyPart" style="padding:10px;" type="button" class="btn btn-primary") Save
+								button(id="modifyPart" type="button" class="m-3 btn btn-primary") Save
 			form(id="add-form")
 				#input-row.form-row
 					div(class="form-group col")
@@ -110,11 +110,11 @@ block content
 				form(id="search-form" class="mb-3")
 					#input-row.form-row
 						div(class="form-group col")
-							label(for="category") Category
-							input(type="text" name="cat" class="form-control no-login-input" placeholder="Category" data-toggle="tooltip" data-placement="top" title="Consumable/IC/MC    Equipment/Sensor/Display  Office Supplies/Other")
-						div(class="form-group col")
 							label(for="partName") Part Name
 							input(type="text" name="partName" class="form-control no-login-input" placeholder="Partname")
+						div(class="form-group col")
+							label(for="category") Category
+							input(type="text" name="cat" class="form-control no-login-input" placeholder="Category" data-toggle="tooltip" data-placement="top" title="Consumable/IC/MC    Equipment/Sensor/Display  Office Supplies/Other")
 						div(class="form-group col")
 							label(for="inputQuantity") Sub-Category
 							input(type="text" name="subCat" class="form-control no-login-input" placeholder="Sub-category")
@@ -152,11 +152,11 @@ block content
 							button(type="button" class="close" data-dismiss="modal")
 						form(id="quantity-form")
 							div(class="form-group col")
-								label(for="amountCheckedOut") Quantity
+								label(for="amountToCheck") Quantity
 								input(type="number" name="amountToCheckOut" class="form-control" placeholder="Quantity" data-toggle="tooltip" data-placement="top")
 						div(class="form-row")
 							label(for="addQty")
-							button(id="addQty" type="button" class="btn btn-primary") Add
+							button(id="addQty" type="button" class="m-3 btn btn-primary") Add
 		if user
 			h4 1. Enter name of the person checking out
 			form(id="add-check-out-form" class="mb-3")
@@ -198,7 +198,7 @@ block content
 					div(class="form-group col")
 						label(for="inputQuantity") Location
 						input(type="text" id="check-out-loc" class="form-control" name="loc" placeholder="Location")
-			h5 Search Results
+			h6 Search Results
 			table(class="table table-sm")
 				thead
 					tr
@@ -213,7 +213,7 @@ block content
 						th Notes
 						th # To Check Out
 				tbody(id='check-out-search-body')
-			h5 Current Check Out
+			h4 Current Check Out Cart
 			table(class="table table-sm")
 				thead
 					tr
@@ -228,7 +228,7 @@ block content
 						th Notes
 						th # To Check Out
 				tbody(id='current-check-out')
-			h5 3. Once satisfied click add check out to finalize.
+			h4 3. Once satisfied click below to finalize.
 			div(class="form-row")
 					button(id="addCheckOutButton" type="button" class="btn btn-primary") Add Check Out
 		if !user
@@ -247,5 +247,80 @@ block content
 		if user
 			h3(class="my-2") All Checkouts
 				h5 (Hitting a plus on a checkout will add the current check-out to it)
+				form(id="filter-checkouts")
+					#input-row.form-row
+						div(class="form-group col")
+							label(for="fname") First Name
+							input(type="text" name="fname" class="form-control filter" placeholder="First Name")
+						div(class="form-group col")
+							label(for="lname") Last Name
+							input(type="text" name="lname" class="form-control filter" placeholder="Last Name")
+						div(class="form-group col")
+							label(for="dNum") Dot #
+							input(type="number" name="dNum" class="form-control filter" placeholder="Dot #")
+						div(class="form-group col")
+							label(for="fNum") Form Number
+							input(type="number" name="fNum" class="form-control filter" placeholder="Form #")
 			div(id="all-checkouts-container")
-			
+	//- Mustache JS Templates
+	script(id="result-row-template" type="template")
+		tr(class="result-row" value="{{value}}")
+			td {{partName}}
+			td {{cat}}
+			td {{subCat}}
+			td {{val}}
+			td {{partName}}
+			td {{loc}}
+			td {{qty}}
+			td {{amountCheckedOut}}
+			td {{notes}}
+	script(id="checkout-table-template" type="template")
+		table(class="table table-sm check-out-table" _id="{{_id}}")
+			thead
+				tr
+					th {{fname}} {{lname}}
+					th Dot# {{dNum}}
+					th Due on {{dateDue}}
+			tbody
+	script(id="checkout-entry-template" type="template")
+		tr(class="checked-out-part")
+			td {{amountToCheckOut}}
+			td {{partName}}
+			td {{partNum}}
+			td {{val}}
+	//- Mustache JS Templates that only are available for admin.js
+	if user
+		script(id="admin-row-template" type="template")
+			tr(class="{{optClass}}" value="{{value}}")
+				td {{partName}}
+				td {{cat}}
+				td {{subCat}}
+				td {{val}}
+				td {{partNum}}
+				td {{loc}}
+				td {{qty}}
+				td {{amountCheckedOut}}
+				td {{notes}}
+		script(id="admin-checkout-table-template" type="template")
+			table(class="table table-sm check-out-table" value="{{_id}}" fNum="{{fNum}}" dNum="{{dNum}}" fname="{{fname}}" lname="{{lname}}")
+				thead
+					tr
+				tbody
+		script(id="admin-checkout-table-heading-template" type="template")
+			th {{fname}} {{lname}}
+			th Dot # {{dNum}}
+			th Form # {{fNum}}
+			th Due on dateDue
+			td 
+				img(class='plus-box' src='/images/plus.png')
+				img(class='check-box-all' src='/images/check.png')
+		script(id="admin-checkout-entry" type="template")
+			tr(class="checked-out-part" value='{{_id}}')
+				td {{amountToCheckOut}}
+				td {{partName}}
+				td {{partName}}
+				td {{partNum}}
+				td {{val}}
+				td {{loc}}
+				//- UNESCAPED HTML
+				td {{{check_part}}} 
